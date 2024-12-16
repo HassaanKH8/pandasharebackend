@@ -1,9 +1,12 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const cors = require('cors');
 const crypto = require('crypto');
 
 const app = express();
+
+app.use(cors({ origin: '*', methods: ['GET', 'POST'], credentials: true }));
 
 const server = http.createServer(app);
 
@@ -49,4 +52,4 @@ app.get('/', (req, res) => {
     res.send("WORKING...")
 })
 
-server.listen(5000, () => console.log('Server running'));
+server.listen(5000, () => console.log('Server running on port 5000'));
