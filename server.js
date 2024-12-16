@@ -9,7 +9,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: "https://pandashareweb.vercel.app/",
+        origin: "https://pandashareweb.vercel.app",
         methods: ["GET", "POST"],
         credentials: true
     }
