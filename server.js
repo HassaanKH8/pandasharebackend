@@ -1,22 +1,15 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors');
 const crypto = require('crypto');
+const cors = require('cors');
+const fs = require('fs');
 
 const app = express();
-
 app.use(cors({ origin: '*', methods: ['GET', 'POST'], credentials: true }));
 
 const server = http.createServer(app);
-
-const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"],
-        credentials: true
-    }
-});
+const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"], credentials: true } });
 
 const fileCache = new Map();
 
@@ -49,7 +42,7 @@ io.on('connection', (socket) => {
 });
 
 app.get('/', (req, res) => {
-    res.send("WORKING...")
-})
+    res.send("WORKING...");
+});
 
 server.listen(5000, () => console.log('Server running on port 5000'));
