@@ -1,38 +1,40 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const crypto = require('crypto');
 const cors = require('cors');
-const fs = require('fs');
+const crypto = require('crypto');
 
 const app = express();
 app.use(cors({ origin: '*', methods: ['GET', 'POST'], credentials: true }));
 
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"], credentials: true } });
+const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'], credentials: true } });
 
-const fileCache = new Map();
+const fileSessions = {};
 
-const generateCode = () => crypto.randomInt(100000, 999999).toString();
+const generateSessionId = () => {
+    return (Date.now().toString(36) + Math.random().toString(36).substr(2, 6)).toUpperCase();
+};
 
 io.on('connection', (socket) => {
     console.log('A user connected');
 
     socket.on('send-files', (files) => {
-        const sessionId = generateCode();
-        fileCache.set(sessionId, files);
+        const sessionId = generateSessionId();
+        fileSessions[sessionId] = { files, createdAt: Date.now() };
+
         socket.emit('files-sent', sessionId);
         console.log(`Files cached with session ID: ${sessionId}`);
     });
 
     socket.on('fetch-files', (sessionId) => {
-        const files = fileCache.get(sessionId);
-        if (files) {
-            socket.emit('receive-files', files);
-            fileCache.delete(sessionId);
-            console.log(`Files delivered and removed for session ID: ${sessionId}`);
+        const sessionData = fileSessions[sessionId];
+        if (sessionData && Date.now() - sessionData.createdAt < 3600000) {
+            socket.emit('receive-files', sessionData.files);
+            delete fileSessions[sessionId];
+            console.log(`Files delivered for session ID: ${sessionId}`);
         } else {
-            socket.emit('error', 'Files not found or expired.');
+            socket.emit('error', 'Session expired or not found.');
         }
     });
 
@@ -45,4 +47,5 @@ app.get('/', (req, res) => {
     res.send("WORKING...");
 });
 
-server.listen(5000, () => console.log('Server running on port 5000'));
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
