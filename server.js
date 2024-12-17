@@ -22,37 +22,39 @@ const generateSessionId = () => {
 io.on('connection', (socket) => {
     console.log('A user connected');
 
-    socket.on('send-file-chunk', ({ sessionId, fileName, chunkIndex, totalChunks, chunkData }) => {
-        if (!chunkedFiles[sessionId]) {
-            chunkedFiles[sessionId] = {};
+    socket.on('send-file-chunk', ({ sessionId, fileName, chunkIndex, totalChunks, chunkData, totalFiles, fileIndex }) => {
+    if (!chunkedFiles[sessionId]) {
+        chunkedFiles[sessionId] = {};
+    }
+
+    if (!chunkedFiles[sessionId][fileName]) {
+        chunkedFiles[sessionId][fileName] = {
+            chunks: [],
+            totalChunks,
+        };
+    }
+
+    const file = chunkedFiles[sessionId][fileName];
+    file.chunks[chunkIndex] = Buffer.from(chunkData, 'base64');
+
+    console.log(`Receiving file ${fileIndex + 1} of ${totalFiles}: ${fileName}, chunk ${chunkIndex + 1}/${totalChunks}`);
+
+    if (file.chunks.filter(Boolean).length === totalChunks) {
+        const completeFile = Buffer.concat(file.chunks);
+
+        if (!fileSessions[sessionId]) {
+            fileSessions[sessionId] = { files: [], createdAt: Date.now() };
         }
 
-        if (!chunkedFiles[sessionId][fileName]) {
-            chunkedFiles[sessionId][fileName] = {
-                chunks: [],
-                totalChunks,
-            };
-        }
+        fileSessions[sessionId].files.push({
+            fileName,
+            fileData: completeFile.toString('base64'),
+        });
 
-        const file = chunkedFiles[sessionId][fileName];
-        file.chunks[chunkIndex] = Buffer.from(chunkData, 'base64');
+        delete chunkedFiles[sessionId][fileName];
+        console.log(`Completed receiving file ${fileIndex + 1} of ${totalFiles}: ${fileName} for session ID: ${sessionId}`);
 
-        if (file.chunks.filter(Boolean).length === totalChunks) {
-            const completeFile = Buffer.concat(file.chunks);
-
-            if (!fileSessions[sessionId]) {
-                fileSessions[sessionId] = { files: [], createdAt: Date.now() };
-            }
-
-            fileSessions[sessionId].files.push({
-                fileName,
-                fileData: completeFile.toString('base64'),
-            });
-
-            delete chunkedFiles[sessionId][fileName];
-            console.log(`Received complete file: ${fileName} for session ID: ${sessionId}`);
-
-            socket.emit('file-received', { sessionId, fileName });
+        socket.emit('file-received', { sessionId, fileName, totalFiles, fileIndex });
         }
     });
 
@@ -63,15 +65,27 @@ io.on('connection', (socket) => {
     });
 
     socket.on('fetch-files', (sessionId) => {
-        const sessionData = fileSessions[sessionId];
-        if (sessionData && Date.now() - sessionData.createdAt < 3600000) {
-            socket.emit('receive-files', sessionData.files);
-            delete fileSessions[sessionId];
-            console.log(`Files delivered for session ID: ${sessionId}`);
-        } else {
-            socket.emit('error', 'Session expired or not found.');
-        }
-    });
+    const sessionData = fileSessions[sessionId];
+    
+    if (sessionData && Date.now() - sessionData.createdAt < 3600000) {
+        const totalFiles = sessionData.files.length;
+        socket.emit('receive-files-data', totalFiles); // Send total number of files
+        
+        sessionData.files.forEach((file, index) => {
+            // Send each file with its index
+            socket.emit('receive-file-chunk', { 
+                file, 
+                index: index + 1, // Current file index (1-based)
+                totalFiles 
+            });
+        });
+
+        delete fileSessions[sessionId];
+        console.log(`Files delivered for session ID: ${sessionId}`);
+    } else {
+        socket.emit('error', 'Session expired or not found.');
+    }
+});
 
     socket.on('disconnect', () => {
         console.log('A user disconnected');
